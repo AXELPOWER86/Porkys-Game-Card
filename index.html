@@ -139,7 +139,7 @@ input[type="file"] {
   <button class="btn" onclick="document.getElementById('imgInput').click()">Aggiungi carte</button>
 
 
-  <input type="file" id="zipInput" accept=".zip">
+  <input type="file" id="zipInput" accept=".zip" multiple>
   <input type="file" id="imgInput" accept="image/*" multiple>
 </div>
 
@@ -194,41 +194,60 @@ function aggiornaContatore() {
 }
 
 function salvaCarte() {
-  localStorage.setItem("mazzo", JSON.stringify(mazzo));
+  const stato = mazzo.map(c => ({
+    nome: c.nome,
+    estratta: c.estratta
+  }));
+  localStorage.setItem("mazzo", JSON.stringify(stato));
 }
 
 function resetCartaVisuale() {
   cartaEstratta.innerHTML = "";
 }
 
-/* ----------- ZIP ----------- */
-zipInput.addEventListener("change", async () => {
-const file = zipInput.files[0];
-if (!file) return;
+function ripristinaStatoCarte() {
+  const salvato = JSON.parse(localStorage.getItem("mazzo"));
+  if (!salvato) return;
 
-if (!file.name.toLowerCase().endsWith(".zip")) {
-  customAlert("I file RAR non sono supportati.\nUsa un file ZIP.");
-  zipInput.value = "";
-  return;
+  salvato.forEach(s => {
+    const carta = mazzo.find(c => c.nome === s.nome);
+    if (carta) carta.estratta = s.estratta;
+  });
 }
 
-  const zip = await JSZip.loadAsync(file);
-  mazzo = [];
-  carteEstratte = [];
+/* ----------- ZIP ----------- */
+zipInput.addEventListener("change", async () => {
+  const files = [...zipInput.files];
+  if (!files.length) return;
 
-  const immagini = Object.values(zip.files)
-    .filter(f => !f.dir && /\.(png|jpe?g|webp)$/i.test(f.name))
-    .sort((a,b) => a.name.localeCompare(b.name));
+  for (const file of files) {
 
-  for (const img of immagini) {
-    const base64 = await img.async("base64");
-    mazzo.push({
-      nome: img.name,
-      img: `data:image/png;base64,${base64}`,
-      estratta: false
-    });
+    if (!file.name.toLowerCase().endsWith(".zip")) {
+      customAlert(`Il file ${file.name} non è uno ZIP valido`);
+      continue;
+    }
+
+    const zip = await JSZip.loadAsync(file);
+
+    const immagini = Object.values(zip.files)
+      .filter(f => !f.dir && /\.(png|jpe?g|webp)$/i.test(f.name))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    for (const img of immagini) {
+
+      // evita duplicati (stesso nome file)
+      if (mazzo.some(c => c.nome === img.name)) continue;
+
+      const base64 = await img.async("base64");
+
+      mazzo.push({
+        nome: img.name,
+        img: `data:image/png;base64,${base64}`,
+        estratta: false
+      });
+    }
   }
-
+  ripristinaStatoCarte(); 
   aggiornaContatore();
   resetCartaVisuale();
   salvaCarte();
@@ -250,7 +269,9 @@ imgInput.addEventListener("change", () => {
         img: e.target.result,
         estratta: false
       });
+      ripristinaStatoCarte(); 
       aggiornaContatore();
+      resetCartaVisuale();
       salvaCarte();
     };
     reader.readAsDataURL(file);
@@ -416,3 +437,4 @@ function apriZip() {
 </div>
 </body>
 </html>
+
